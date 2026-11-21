@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 
 type Tab = "mine" | "missions" | "friends" | "wallet";
 
@@ -30,7 +30,71 @@ export default function Home() {
   const [claimed, setClaimed] = useState<string[]>([]);
   const [adTimer, setAdTimer] = useState<number>(0);
   const [copied, setCopied] = useState<boolean>(false);
-  const pendingTaps = useRef<number>(0);
+  const [saveStatus, setSaveStatus] = useState<string>("Sincronizat");
+
+  const pendingCoins = useRef<number>(0);
+  const latestEnergy = useRef<number>(1000);
+  const latestMultitap = useRef<number>(1);
+  const latestUserId = useRef<number>(6905117764);
+  const latestUserName = useRef<string>("Grigore");
+
+  useEffect(() => {
+    latestEnergy.current = energy;
+  }, [energy]);
+
+  useEffect(() => {
+    latestMultitap.current = multitap;
+  }, [multitap]);
+
+  useEffect(() => {
+    latestUserId.current = userId;
+    latestUserName.current = userName;
+  }, [userId, userName]);
+
+  const flushToServer = useCallback(async (extraCoins = 0, overrideMultitap?: number, useKeepalive = false) => {
+    const uid = latestUserId.current;
+    const uname = latestUserName.current;
+    const addAmt = pendingCoins.current + extraCoins;
+    const activeLvl = overrideMultitap ?? latestMultitap.current;
+    const activeEnergy = latestEnergy.current;
+
+    if (!uid) return;
+    if (addAmt === 0 && overrideMultitap === undefined) return;
+
+    pendingCoins.current = 0;
+    setSaveStatus("Salvare...");
+
+    try {
+      const res = await fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: useKeepalive,
+        body: JSON.stringify({
+          telegramId: uid,
+          username: uname,
+          coinsToAdd: addAmt,
+          energy: activeEnergy,
+          multitap: activeLvl,
+        }),
+      });
+      if (res.ok && !useKeepalive) {
+        const data = await res.json();
+        if (data.user) {
+          setCoins(Number(data.user.coins));
+          setEnergy(Number(data.user.energy));
+          setMaxEnergy(Number(data.user.max_energy));
+          setMultitap(Number(data.user.multitap));
+          latestMultitap.current = Number(data.user.multitap);
+          setSaveStatus("Salvat ✓");
+        }
+      }
+    } catch {
+      if (addAmt > 0) {
+        pendingCoins.current += addAmt;
+      }
+      setSaveStatus("Reîncerc...");
+    }
+  }, []);
 
   useEffect(() => {
     const tg = (window as unknown as {
@@ -57,6 +121,8 @@ export default function Home() {
 
     setUserId(activeId);
     setUserName(activeName);
+    latestUserId.current = activeId;
+    latestUserName.current = activeName;
 
     const savedClaims = localStorage.getItem(`zx_claims_${activeId}`);
     if (savedClaims) {
@@ -68,67 +134,93 @@ export default function Home() {
     fetch("/api/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ telegram_id: activeId, username: activeName, taps: 0 }),
+      body: JSON.stringify({
+        telegramId: activeId,
+        username: activeName,
+        coinsToAdd: 0,
+        energy: 1000,
+        multitap: 1,
+      }),
     })
       .then((r) => r.json())
       .then((data) => {
         if (data.user) {
-          setCoins(Number(data.user.coins));
-          setEnergy(Number(data.user.energy));
-          setMaxEnergy(Number(data.user.max_energy));
-          setMultitap(Number(data.user.multitap));
+          const dbCoins = Number(data.user.coins) || 0;
+          const dbEnergy = Number(data.user.energy) ?? 1000;
+          const dbMaxEnergy = Number(data.user.max_energy) || 1000;
+          const dbMultitap = Number(data.user.multitap) || 1;
+          setCoins(dbCoins);
+          setEnergy(dbEnergy);
+          setMaxEnergy(dbMaxEnergy);
+          setMultitap(dbMultitap);
+          latestEnergy.current = dbEnergy;
+          latestMultitap.current = dbMultitap;
+          setSaveStatus("Salvat ✓");
         }
       })
-      .catch(() => {});
+      .catch(() => setSaveStatus("Offline"));
   }, []);
 
   useEffect(() => {
     const regen = setInterval(() => {
-      setEnergy((prev) => (prev < maxEnergy ? Math.min(maxEnergy, prev + 2) : prev));
+      setEnergy((prev) => {
+        const next = prev < maxEnergy ? Math.min(maxEnergy, prev + 2) : prev;
+        latestEnergy.current = next;
+        return next;
+      });
     }, 1000);
 
     const syncLoop = setInterval(() => {
-      if (pendingTaps.current > 0) {
-        const tapsToSend = pendingTaps.current;
-        pendingTaps.current = 0;
-        fetch("/api/sync", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ telegram_id: userId, username: userName, taps: tapsToSend }),
-        }).catch(() => {});
+      if (pendingCoins.current > 0) {
+        void flushToServer(0);
       }
-    }, 2500);
+    }, 1500);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        void flushToServer(0, undefined, true);
+      }
+    };
+
+    const handlePageHide = () => {
+      void flushToServer(0, undefined, true);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pagehide", handlePageHide);
 
     return () => {
       clearInterval(regen);
       clearInterval(syncLoop);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pagehide", handlePageHide);
     };
-  }, [maxEnergy, userId, userName]);
+  }, [maxEnergy, flushToServer]);
 
   const handleTap = () => {
     if (energy < multitap) return;
     setCoins((c) => c + multitap);
-    setEnergy((e) => Math.max(0, e - multitap));
-    pendingTaps.current += 1;
+    setEnergy((e) => {
+      const next = Math.max(0, e - multitap);
+      latestEnergy.current = next;
+      return next;
+    });
+    pendingCoins.current += multitap;
+    setSaveStatus("Nesalvat...");
   };
 
   const upgradeCost = multitap * 250;
 
   const handleUpgrade = async () => {
     if (coins < upgradeCost) return;
-    const res = await fetch("/api/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ telegram_id: userId, username: userName, taps: 0, upgrade: "multitap" }),
-    });
-    const data = await res.json();
-    if (data.user) {
-      setCoins(Number(data.user.coins));
-      setMultitap(Number(data.user.multitap));
-    }
+    const nextLevel = multitap + 1;
+    setCoins((c) => Math.max(0, c - upgradeCost));
+    setMultitap(nextLevel);
+    latestMultitap.current = nextLevel;
+    await flushToServer(-upgradeCost, nextLevel);
   };
 
-  const handleMissionClaim = (m: MissionItem) => {
+  const handleMissionClaim = async (m: MissionItem) => {
     if (m.id === "ad_watch_1") {
       if (adTimer > 0) return;
       setAdTimer(5);
@@ -137,7 +229,7 @@ export default function Home() {
           if (prev <= 1) {
             clearInterval(timer);
             setCoins((c) => c + m.reward);
-            pendingTaps.current += Math.ceil(m.reward / multitap);
+            void flushToServer(m.reward);
             return 0;
           }
           return prev - 1;
@@ -151,7 +243,7 @@ export default function Home() {
     setClaimed(updated);
     localStorage.setItem(`zx_claims_${userId}`, JSON.stringify(updated));
     setCoins((c) => c + m.reward);
-    pendingTaps.current += Math.ceil(m.reward / multitap);
+    await flushToServer(m.reward);
   };
 
   const inviteLink = `https://t.me/zxtap_official_bot?start=ref_${userId}`;
@@ -166,16 +258,14 @@ export default function Home() {
 
   return (
     <main className="zx-container">
-      {/* Header fix sus */}
       <header className="zx-header">
         <div>
-          <div className="zx-brand">ZENITH XECUTION</div>
+          <div className="zx-brand">ZENITH XECUTION • {saveStatus}</div>
           <div className="zx-user">{userName}</div>
         </div>
         <div className="zx-badge">Lvl {multitap} • {coins.toLocaleString()} ZX</div>
       </header>
 
-      {/* Zona centrală în funcție de tab */}
       <div className="zx-main">
         {activeTab === "mine" && (
           <>
@@ -292,7 +382,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* Bara de navigare jos */}
       <nav className="zx-nav">
         <button type="button" onClick={() => setActiveTab("mine")} className={`zx-nav-item ${activeTab === "mine" ? "active" : ""}`}>
           <span style={{ fontSize: "16px" }}>⚡</span>
