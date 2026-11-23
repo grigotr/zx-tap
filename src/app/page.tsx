@@ -19,7 +19,7 @@ interface LeaderRow {
 }
 
 const MISSIONS: MissionItem[] = [
-  { id: "ad_watch_1", title: "📺 Vizionează Reclamă Sponsor", subtitle: "Recompensă instantă (Adsgram / Monetag)", reward: 1500, tag: "ADS" },
+  { id: "ad_watch_1", title: "📺 Vizionează Reclamă Sponsor", subtitle: "Recompensă după 5 secunde", reward: 1500, tag: "ADS" },
   { id: "daily_checkin", title: "🎁 Bonus Zilnic de Conectare", subtitle: "Intră zilnic pentru puncte suplimentare", reward: 2000, tag: "DAILY" },
   { id: "tg_channel", title: "📢 Abonează-te la Canalul ZX", subtitle: "Urmărește anunțurile oficiale Zenith Xecution", reward: 5000, tag: "SOCIAL" },
   { id: "share_story", title: "⚡ Distribuie ZX Tap prietenilor", subtitle: "Trimite link-ul de invitație pe Telegram", reward: 3000, tag: "TASK" },
@@ -246,22 +246,6 @@ export default function Home() {
   const handleMissionClaim = async (m: MissionItem) => {
     if (m.id === "ad_watch_1") {
       if (adTimer > 0) return;
-
-      const showAd = (window as unknown as { show_12331210?: () => Promise<void> }).show_12331210;
-
-      if (typeof showAd === "function") {
-        setAdTimer(1);
-        try {
-          await showAd();
-          setCoins((c) => c + m.reward);
-          await flushToServer(m.reward);
-        } catch {
-          // Reclama a fost închisă înainte de finalizare sau nu a putut fi afișată
-        } finally {
-          setAdTimer(0);
-        }
-        return;
-      }
 
       setAdTimer(5);
       const timer = setInterval(() => {
