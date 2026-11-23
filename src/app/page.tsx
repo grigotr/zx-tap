@@ -504,9 +504,6 @@ export default function Home() {
                   {myRank ? `#${myRank}` : "Se calculează..."} • {userName}
                 </div>
               </div>
-              <button type="button" onClick={handleCopyInvite} className="zx-btn-cyan">
-                {copied ? "✓ Copiat" : "👥 Invită (+5k)"}
-              </button>
             </div>
 
             <div style={{ fontSize: "13px", fontWeight: 700, color: "#e4e4e7", marginTop: "2px" }}>
