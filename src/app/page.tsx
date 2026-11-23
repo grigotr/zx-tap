@@ -247,18 +247,47 @@ export default function Home() {
     if (m.id === "ad_watch_1") {
       if (adTimer > 0) return;
 
-      setAdTimer(5);
-      const timer = setInterval(() => {
-        setAdTimer((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            setCoins((c) => c + m.reward);
-            void flushToServer(m.reward);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+      let timerStarted = false;
+      const startRewardTimer = () => {
+        if (timerStarted) return;
+        timerStarted = true;
+
+        setAdTimer(5);
+        const timer = setInterval(() => {
+          setAdTimer((prev) => {
+            if (prev <= 1) {
+              clearInterval(timer);
+              setCoins((c) => c + m.reward);
+              void flushToServer(m.reward);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      };
+
+      startRewardTimer();
+
+      const Adsgram = (window as unknown as {
+        Adsgram?: {
+          init: (config: { blockId: number }) => {
+            show: () => Promise<unknown>;
+          };
+        };
+      }).Adsgram;
+
+      if (!Adsgram) {
+        startRewardTimer();
+        return;
+      }
+
+      try {
+        void Adsgram.init({ blockId: 12345 })
+          .show()
+          .catch(() => startRewardTimer());
+      } catch {
+        startRewardTimer();
+      }
       return;
     }
 
