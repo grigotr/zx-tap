@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 
-type Tab = "mine" | "missions" | "top" | "wallet";
+type Tab = "mine" | "missions" | "friends" | "top" | "wallet";
 
 interface MissionItem {
   id: string;
@@ -16,6 +16,12 @@ interface LeaderRow {
   telegram_id: string | number;
   username: string;
   coins: string | number;
+}
+
+interface ReferralRow {
+  telegram_id: string | number;
+  username: string;
+  earned: string | number;
 }
 
 const MISSIONS: MissionItem[] = [
@@ -41,12 +47,18 @@ export default function Home() {
   const [leaderboard, setLeaderboard] = useState<LeaderRow[]>([]);
   const [myRank, setMyRank] = useState<number | null>(null);
   const [loadingTop, setLoadingTop] = useState<boolean>(false);
+  const [referrals, setReferrals] = useState<ReferralRow[]>([]);
+  const [referralCount, setReferralCount] = useState<number>(0);
+  const [referralEarnings, setReferralEarnings] = useState<number>(0);
+  const [loadingFriends, setLoadingFriends] = useState<boolean>(false);
+  const [referrerId, setReferrerId] = useState<number | null>(null);
 
   const pendingCoins = useRef<number>(0);
   const latestEnergy = useRef<number>(1000);
   const latestMultitap = useRef<number>(1);
   const latestUserId = useRef<number>(6905117764);
   const latestUserName = useRef<string>("Grigore");
+  const latestReferrerId = useRef<number | null>(null);
 
   useEffect(() => {
     latestEnergy.current = energy;
@@ -61,9 +73,14 @@ export default function Home() {
     latestUserName.current = userName;
   }, [userId, userName]);
 
+  useEffect(() => {
+    latestReferrerId.current = referrerId;
+  }, [referrerId]);
+
   const flushToServer = useCallback(async (extraCoins = 0, overrideMultitap?: number, useKeepalive = false) => {
     const uid = latestUserId.current;
     const uname = latestUserName.current;
+    const referrer = latestReferrerId.current;
     const addAmt = pendingCoins.current + extraCoins;
     const activeLvl = overrideMultitap ?? latestMultitap.current;
     const activeEnergy = latestEnergy.current;
@@ -85,6 +102,7 @@ export default function Home() {
           coinsToAdd: addAmt,
           energy: activeEnergy,
           multitap: activeLvl,
+          referrerId: referrer,
         }),
       });
       if (res.ok && !useKeepalive) {
@@ -112,13 +130,17 @@ export default function Home() {
         WebApp?: {
           ready: () => void;
           expand: () => void;
-          initDataUnsafe?: { user?: { id: number; first_name?: string; username?: string } };
+          initDataUnsafe?: {
+            user?: { id: number; first_name?: string; username?: string };
+            start_param?: string;
+          };
         };
       };
     }).Telegram?.WebApp;
 
     let activeId = 6905117764;
     let activeName = "Grigore";
+    let activeReferrerId: number | null = null;
 
     if (tg) {
       tg.ready();
@@ -126,6 +148,13 @@ export default function Home() {
       if (tg.initDataUnsafe?.user) {
         activeId = tg.initDataUnsafe.user.id;
         activeName = tg.initDataUnsafe.user.first_name || tg.initDataUnsafe.user.username || "Player";
+      }
+      const startParam = tg.initDataUnsafe?.start_param;
+      if (startParam?.startsWith("ref_")) {
+        const parsedReferrerId = Number(startParam.slice(4));
+        if (Number.isInteger(parsedReferrerId) && parsedReferrerId > 0 && parsedReferrerId !== activeId) {
+          activeReferrerId = parsedReferrerId;
+        }
       }
     }
 
@@ -141,6 +170,15 @@ export default function Home() {
       } catch {}
     }
 
+    const savedReferrer = localStorage.getItem(`zx_referrer_${activeId}`);
+    if (!savedReferrer && activeReferrerId) {
+      // The referrer is persisted locally and also retained once by the server.
+      localStorage.setItem(`zx_referrer_${activeId}`, String(activeReferrerId));
+    }
+    const referrerId = savedReferrer ? Number(savedReferrer) : activeReferrerId;
+    setReferrerId(referrerId);
+    latestReferrerId.current = referrerId;
+
     fetch("/api/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -150,6 +188,7 @@ export default function Home() {
         coinsToAdd: 0,
         energy: 1000,
         multitap: 1,
+        referrerId,
       }),
     })
       .then((r) => r.json())
@@ -182,6 +221,20 @@ export default function Home() {
       })
       .catch(() => {})
       .finally(() => setLoadingTop(false));
+  }, [activeTab, userId]);
+
+  useEffect(() => {
+    if (activeTab !== "friends") return;
+    setLoadingFriends(true);
+    fetch(`/api/sync?telegramId=${userId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setReferrals(Array.isArray(data.referrals) ? data.referrals : []);
+        setReferralCount(Number(data.referralCount) || 0);
+        setReferralEarnings(Number(data.referralEarnings) || 0);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingFriends(false));
   }, [activeTab, userId]);
 
   useEffect(() => {
@@ -278,12 +331,28 @@ export default function Home() {
     await flushToServer(m.reward);
   };
 
-  const inviteLink = `https://t.me/zxtap_official_bot?start=ref_${userId}`;
+  const inviteLink = `https://t.me/zxtap_official_bot/app?startapp=ref_${userId}`;
 
   const handleCopyInvite = () => {
     navigator.clipboard.writeText(inviteLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleShareInvite = () => {
+    const tg = (window as unknown as {
+      Telegram?: {
+        WebApp?: {
+          openTelegramLink?: (url: string) => void;
+        };
+      };
+    }).Telegram?.WebApp;
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent("Alătură-te ZX-Tap și mina ZX împreună cu mine!")}`;
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(shareUrl);
+    } else {
+      window.open(shareUrl, "_blank", "noopener,noreferrer");
+    }
   };
 
   const energyPercent = Math.min(100, Math.round((energy / maxEnergy) * 100));
@@ -376,6 +445,56 @@ export default function Home() {
           </div>
         )}
 
+        {activeTab === "friends" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ textAlign: "center", marginBottom: "4px" }}>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#ffffff" }}>👥 Friends & Referrals</div>
+              <div style={{ fontSize: "12px", color: "#94a3b8" }}>Primești 10% din monedele câștigate de invitații tăi</div>
+            </div>
+
+            <div className="zx-card" style={{ gap: "10px" }}>
+              <div style={{ textAlign: "left" }}>
+                <div style={{ fontSize: "11px", color: "#94a3b8" }}>Invitați</div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#22d3ee" }}>{referralCount}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "11px", color: "#94a3b8" }}>Total comision ZX</div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#facc15" }}>{referralEarnings.toLocaleString()} ZX</div>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+              <button type="button" onClick={handleCopyInvite} className="zx-btn-cyan">
+                {copied ? "✓ Link copiat" : "📋 Copy Link"}
+              </button>
+              <button type="button" onClick={handleShareInvite} className="zx-btn-pill">
+                ↗️ Share
+              </button>
+            </div>
+
+            {loadingFriends ? (
+              <div style={{ textAlign: "center", color: "#94a3b8", fontSize: "12px", padding: "16px 0" }}>
+                Se încarcă invitații...
+              </div>
+            ) : referrals.length === 0 ? (
+              <div className="zx-card" style={{ justifyContent: "center", color: "#94a3b8", fontSize: "12px" }}>
+                Nu ai invitați încă
+              </div>
+            ) : (
+              referrals.map((referral) => (
+                <div key={String(referral.telegram_id)} className="zx-card" style={{ padding: "9px 12px" }}>
+                  <div style={{ fontWeight: 700, fontSize: "13px" }}>
+                    {referral.username || "Player"}
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: "12px", color: "#facc15" }}>
+                    +{Number(referral.earned).toLocaleString()} ZX
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
         {activeTab === "top" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             <div className="zx-card" style={{ borderColor: "rgba(250, 204, 21, 0.45)" }}>
@@ -456,6 +575,10 @@ export default function Home() {
         <button type="button" onClick={() => setActiveTab("missions")} className={`zx-nav-item ${activeTab === "missions" ? "active" : ""}`}>
           <span style={{ fontSize: "16px" }}>🎯</span>
           <span>Misiuni</span>
+        </button>
+        <button type="button" onClick={() => setActiveTab("friends")} className={`zx-nav-item ${activeTab === "friends" ? "active" : ""}`}>
+          <span style={{ fontSize: "16px" }}>👥</span>
+          <span>Friends</span>
         </button>
         <button type="button" onClick={() => setActiveTab("top")} className={`zx-nav-item ${activeTab === "top" ? "active" : ""}`}>
           <span style={{ fontSize: "16px" }}>🏆</span>

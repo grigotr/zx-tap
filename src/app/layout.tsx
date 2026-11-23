@@ -150,7 +150,7 @@ export default function RootLayout({
           }
           .zx-nav {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(5, 1fr);
             gap: 6px;
             background: rgba(24, 24, 27, 0.95);
             border: 1px solid rgba(255, 255, 255, 0.08);
