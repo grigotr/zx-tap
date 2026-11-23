@@ -19,6 +19,10 @@ export default function RootLayout({
           src="https://telegram.org/js/telegram-web-app.js"
           strategy="beforeInteractive"
         />
+        <Script
+          src="https://sad.adsgram.ai/js/sad.min.js"
+          strategy="beforeInteractive"
+        />
         <style>{`
           * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
           html, body {
