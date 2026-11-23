@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 
-type Tab = "mine" | "missions" | "friends" | "wallet";
+type Tab = "mine" | "missions" | "top" | "wallet";
 
 interface MissionItem {
   id: string;
@@ -10,6 +10,12 @@ interface MissionItem {
   subtitle: string;
   reward: number;
   tag: string;
+}
+
+interface LeaderRow {
+  telegram_id: string | number;
+  username: string;
+  coins: string | number;
 }
 
 const MISSIONS: MissionItem[] = [
@@ -31,6 +37,10 @@ export default function Home() {
   const [adTimer, setAdTimer] = useState<number>(0);
   const [copied, setCopied] = useState<boolean>(false);
   const [saveStatus, setSaveStatus] = useState<string>("Sincronizat");
+
+  const [leaderboard, setLeaderboard] = useState<LeaderRow[]>([]);
+  const [myRank, setMyRank] = useState<number | null>(null);
+  const [loadingTop, setLoadingTop] = useState<boolean>(false);
 
   const pendingCoins = useRef<number>(0);
   const latestEnergy = useRef<number>(1000);
@@ -160,6 +170,19 @@ export default function Home() {
       })
       .catch(() => setSaveStatus("Offline"));
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== "top") return;
+    setLoadingTop(true);
+    fetch(`/api/leaderboard?telegramId=${userId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data.top)) setLeaderboard(data.top);
+        if (data.myRank !== undefined) setMyRank(data.myRank);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingTop(false));
+  }, [activeTab, userId]);
 
   useEffect(() => {
     const regen = setInterval(() => {
@@ -344,24 +367,58 @@ export default function Home() {
           </div>
         )}
 
-        {activeTab === "friends" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: "18px", fontWeight: 800, color: "#ffffff" }}>👥 Invită Prieteni</div>
-              <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "2px" }}>
-                Primești +5,000 ZX pentru fiecare prieten care intră pe link-ul tău
+        {activeTab === "top" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div className="zx-card" style={{ borderColor: "rgba(250, 204, 21, 0.45)" }}>
+              <div>
+                <div style={{ fontSize: "11px", color: "#94a3b8" }}>Poziția ta în clasament</div>
+                <div style={{ fontSize: "17px", fontWeight: 800, color: "#facc15" }}>
+                  {myRank ? `#${myRank}` : "Se calculează..."} • {userName}
+                </div>
               </div>
-            </div>
-
-            <div className="zx-card" style={{ flexDirection: "column", alignItems: "stretch", gap: "10px" }}>
-              <div style={{ fontSize: "11px", color: "#94a3b8" }}>Link-ul tău de invitație:</div>
-              <div style={{ background: "#09090b", padding: "10px", borderRadius: "10px", fontSize: "11px", color: "#22d3ee", wordBreak: "break-all", border: "1px solid #27272a" }}>
-                {inviteLink}
-              </div>
-              <button type="button" onClick={handleCopyInvite} className="zx-btn-cyan" style={{ width: "100%", padding: "10px" }}>
-                {copied ? "✓ Link copiat!" : "📋 Copiază link-ul de invitație"}
+              <button type="button" onClick={handleCopyInvite} className="zx-btn-cyan">
+                {copied ? "✓ Copiat" : "👥 Invită (+5k)"}
               </button>
             </div>
+
+            <div style={{ fontSize: "13px", fontWeight: 700, color: "#e4e4e7", marginTop: "2px" }}>
+              🏆 Top 20 Jucători ZX Tap
+            </div>
+
+            {loadingTop ? (
+              <div style={{ textAlign: "center", color: "#94a3b8", fontSize: "12px", padding: "16px 0" }}>
+                Se încarcă clasamentul...
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {leaderboard.map((row, idx) => {
+                  const isMe = Number(row.telegram_id) === userId;
+                  const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`;
+                  return (
+                    <div
+                      key={String(row.telegram_id)}
+                      className="zx-card"
+                      style={{
+                        padding: "9px 12px",
+                        borderColor: isMe ? "#22d3ee" : "rgba(255,255,255,0.08)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontWeight: 800, color: idx < 3 ? "#facc15" : "#94a3b8", minWidth: "26px" }}>
+                          {medal}
+                        </span>
+                        <span style={{ fontWeight: 700, fontSize: "13px", color: isMe ? "#22d3ee" : "#ffffff" }}>
+                          {row.username || "Player"} {isMe ? "(Tu)" : ""}
+                        </span>
+                      </div>
+                      <span style={{ fontWeight: 700, fontSize: "12px", color: "#facc15" }}>
+                        {Number(row.coins).toLocaleString()} ZX
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -391,9 +448,9 @@ export default function Home() {
           <span style={{ fontSize: "16px" }}>🎯</span>
           <span>Misiuni</span>
         </button>
-        <button type="button" onClick={() => setActiveTab("friends")} className={`zx-nav-item ${activeTab === "friends" ? "active" : ""}`}>
-          <span style={{ fontSize: "16px" }}>👥</span>
-          <span>Prieteni</span>
+        <button type="button" onClick={() => setActiveTab("top")} className={`zx-nav-item ${activeTab === "top" ? "active" : ""}`}>
+          <span style={{ fontSize: "16px" }}>🏆</span>
+          <span>Top</span>
         </button>
         <button type="button" onClick={() => setActiveTab("wallet")} className={`zx-nav-item ${activeTab === "wallet" ? "active" : ""}`}>
           <span style={{ fontSize: "16px" }}>💎</span>
