@@ -246,6 +246,23 @@ export default function Home() {
   const handleMissionClaim = async (m: MissionItem) => {
     if (m.id === "ad_watch_1") {
       if (adTimer > 0) return;
+
+      const showAd = (window as unknown as { show_12331210?: () => Promise<void> }).show_12331210;
+
+      if (typeof showAd === "function") {
+        setAdTimer(1);
+        try {
+          await showAd();
+          setCoins((c) => c + m.reward);
+          await flushToServer(m.reward);
+        } catch {
+          // Reclama a fost închisă înainte de finalizare sau nu a putut fi afișată
+        } finally {
+          setAdTimer(0);
+        }
+        return;
+      }
+
       setAdTimer(5);
       const timer = setInterval(() => {
         setAdTimer((prev) => {

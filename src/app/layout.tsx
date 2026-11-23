@@ -19,6 +19,12 @@ export default function RootLayout({
           src="https://telegram.org/js/telegram-web-app.js"
           strategy="beforeInteractive"
         />
+        <Script
+          src="https://libtl.com/sdk.js"
+          data-zone="12331210"
+          data-sdk="show_12331210"
+          strategy="afterInteractive"
+        />
         <style>{`
           * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
           html, body {
