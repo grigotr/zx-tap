@@ -34,7 +34,7 @@ export default function Home() {
   const [maxEnergy, setMaxEnergy] = useState<number>(1000);
   const [multitap, setMultitap] = useState<number>(1);
   const [claimed, setClaimed] = useState<string[]>([]);
-  const [adTimer, setAdTimer] = useState<number>(0);
+  const [adInProgress, setAdInProgress] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [saveStatus, setSaveStatus] = useState<string>("Sincronizat");
 
@@ -245,48 +245,27 @@ export default function Home() {
 
   const handleMissionClaim = async (m: MissionItem) => {
     if (m.id === "ad_watch_1") {
-      if (adTimer > 0) return;
-
-      let timerStarted = false;
-      const startRewardTimer = () => {
-        if (timerStarted) return;
-        timerStarted = true;
-
-        setAdTimer(5);
-        const timer = setInterval(() => {
-          setAdTimer((prev) => {
-            if (prev <= 1) {
-              clearInterval(timer);
-              setCoins((c) => c + m.reward);
-              void flushToServer(m.reward);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
-      };
-
-      startRewardTimer();
+      if (adInProgress) return;
 
       const Adsgram = (window as unknown as {
         Adsgram?: {
-          init: (config: { blockId: number }) => {
+          init: (config: { blockId: string }) => {
             show: () => Promise<unknown>;
           };
         };
       }).Adsgram;
 
-      if (!Adsgram) {
-        startRewardTimer();
-        return;
-      }
+      if (!Adsgram) return;
 
+      setAdInProgress(true);
       try {
-        void Adsgram.init({ blockId: 12345 })
-          .show()
-          .catch(() => startRewardTimer());
+        await Adsgram.init({ blockId: "61531" }).show();
+        setCoins((c) => c + m.reward);
+        await flushToServer(m.reward);
       } catch {
-        startRewardTimer();
+        // Do not award the mission reward if the ad does not complete.
+      } finally {
+        setAdInProgress(false);
       }
       return;
     }
@@ -373,7 +352,7 @@ export default function Home() {
 
             {MISSIONS.map((m) => {
               const isDone = claimed.includes(m.id);
-              const isAdRunning = m.id === "ad_watch_1" && adTimer > 0;
+              const isAdRunning = m.id === "ad_watch_1" && adInProgress;
               return (
                 <div key={m.id} className="zx-card">
                   <div style={{ paddingRight: "10px" }}>
@@ -389,7 +368,7 @@ export default function Home() {
                     onClick={() => handleMissionClaim(m)}
                     className={m.id === "ad_watch_1" ? "zx-btn-cyan" : "zx-btn-pill"}
                   >
-                    {isAdRunning ? `Reclamă (${adTimer}s)` : isDone ? "✓ Primit" : m.id === "ad_watch_1" ? "▶ Watch" : "Claim"}
+                    {isAdRunning ? "Reclamă..." : isDone ? "✓ Primit" : m.id === "ad_watch_1" ? "▶ Watch" : "Claim"}
                   </button>
                 </div>
               );
