@@ -25,7 +25,7 @@ interface ReferralRow {
 }
 
 const MISSIONS: MissionItem[] = [
-  { id: "ad_watch_1", title: "📺 Vizionează Reclamă Sponsor", subtitle: "Recompensă după 5 secunde", reward: 1500, tag: "ADS" },
+  { id: "ad_watch_1", title: "📺 Vizionare reclamă Reward (opțională)", subtitle: "Alege să vezi reclama; recompensa se acordă după vizionare", reward: 1500, tag: "ADS" },
   { id: "daily_checkin", title: "🎁 Bonus Zilnic de Conectare", subtitle: "Intră zilnic pentru puncte suplimentare", reward: 2000, tag: "DAILY" },
   { id: "tg_channel", title: "📢 Abonează-te la Canalul ZX", subtitle: "Urmărește anunțurile oficiale Zenith Xecution", reward: 5000, tag: "SOCIAL" },
   { id: "share_story", title: "⚡ Distribuie ZX Tap prietenilor", subtitle: "Trimite link-ul de invitație pe Telegram", reward: 3000, tag: "TASK" },
@@ -312,7 +312,7 @@ export default function Home() {
 
       setAdInProgress(true);
       try {
-        await Adsgram.init({ blockId: "61531" }).show();
+        await Adsgram.init({ blockId: "61612" }).show();
         setCoins((c) => c + m.reward);
         await flushToServer(m.reward);
       } catch {
@@ -437,7 +437,7 @@ export default function Home() {
                     onClick={() => handleMissionClaim(m)}
                     className={m.id === "ad_watch_1" ? "zx-btn-cyan" : "zx-btn-pill"}
                   >
-                    {isAdRunning ? "Reclamă..." : isDone ? "✓ Primit" : m.id === "ad_watch_1" ? "▶ Watch" : "Claim"}
+                    {isAdRunning ? "Se încarcă..." : isDone ? "✓ Primit" : m.id === "ad_watch_1" ? "▶ Vizionare reclamă" : "Claim"}
                   </button>
                 </div>
               );
