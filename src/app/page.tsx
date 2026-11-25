@@ -395,6 +395,32 @@ export default function Home() {
 
               <button
                 type="button"
+                onClick={() => handleMissionClaim(MISSIONS[0])}
+                disabled={adInProgress}
+                className="zx-card"
+                style={{
+                  background: "linear-gradient(135deg, rgba(34, 211, 238, 0.18), rgba(250, 204, 21, 0.12))",
+                  borderColor: "rgba(250, 204, 21, 0.55)",
+                  cursor: adInProgress ? "wait" : "pointer",
+                  textAlign: "left",
+                }}
+              >
+                <div style={{ paddingRight: "10px" }}>
+                  <div style={{ fontSize: "10px", color: "#facc15", fontWeight: 800, letterSpacing: "0.08em" }}>
+                    📺 REWARD • +1.500 ZX
+                  </div>
+                  <div style={{ fontWeight: 800, fontSize: "13px", marginTop: "2px" }}>
+                    Vizionează reclama (+Bonus)
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#cbd5e1", marginTop: "2px" }}>
+                    Primești bonusul după vizionare — nu trebuie să dai clic pe reclamă.
+                  </div>
+                </div>
+                <span className="zx-btn-pill">{adInProgress ? "Se încarcă..." : "▶ Vizionează"}</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handleUpgrade}
                 disabled={coins < upgradeCost}
                 className="zx-card"
