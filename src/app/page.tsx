@@ -24,8 +24,23 @@ interface ReferralRow {
   earned: string | number;
 }
 
+const AD_REWARD = 1000;
+const AD_DAILY_LIMIT = 20;
+
+const getLocalDateKey = () => {
+  const date = new Date();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+};
+
+const readDailyAdCount = (userId: number, date: string) => {
+  const count = Number(localStorage.getItem(`zx_rewarded_ads_${userId}_${date}`));
+  return Number.isInteger(count) && count > 0 ? Math.min(count, AD_DAILY_LIMIT) : 0;
+};
+
 const MISSIONS: MissionItem[] = [
-  { id: "ad_watch_1", title: "📺 Vizionare reclamă Reward (opțională)", subtitle: "Alege să vezi reclama; recompensa se acordă după vizionare", reward: 1500, tag: "ADS" },
+  { id: "ad_watch_1", title: "📺 Vizionare reclamă Reward (opțională)", subtitle: "Alege să vezi reclama; recompensa se acordă după vizionare", reward: AD_REWARD, tag: "ADS" },
   { id: "daily_checkin", title: "🎁 Bonus Zilnic de Conectare", subtitle: "Intră zilnic pentru puncte suplimentare", reward: 2000, tag: "DAILY" },
   { id: "tg_channel", title: "📢 Abonează-te la Canalul ZX", subtitle: "Urmărește anunțurile oficiale Zenith Xecution", reward: 5000, tag: "SOCIAL" },
   { id: "share_story", title: "⚡ Distribuie ZX Tap prietenilor", subtitle: "Trimite link-ul de invitație pe Telegram", reward: 3000, tag: "TASK" },
@@ -41,6 +56,7 @@ export default function Home() {
   const [multitap, setMultitap] = useState<number>(1);
   const [claimed, setClaimed] = useState<string[]>([]);
   const [adInProgress, setAdInProgress] = useState<boolean>(false);
+  const [dailyAdCount, setDailyAdCount] = useState<number>(0);
   const [copied, setCopied] = useState<boolean>(false);
   const [saveStatus, setSaveStatus] = useState<string>("Sincronizat");
 
@@ -59,6 +75,9 @@ export default function Home() {
   const latestUserId = useRef<number>(6905117764);
   const latestUserName = useRef<string>("Grigore");
   const latestReferrerId = useRef<number | null>(null);
+  const dailyAdCountRef = useRef<number>(0);
+  const dailyAdDateRef = useRef<string>("");
+  const adInProgressRef = useRef<boolean>(false);
 
   useEffect(() => {
     latestEnergy.current = energy;
@@ -162,6 +181,11 @@ export default function Home() {
     setUserName(activeName);
     latestUserId.current = activeId;
     latestUserName.current = activeName;
+    const adDate = getLocalDateKey();
+    const savedAdCount = readDailyAdCount(activeId, adDate);
+    dailyAdDateRef.current = adDate;
+    dailyAdCountRef.current = savedAdCount;
+    setDailyAdCount(savedAdCount);
 
     const savedClaims = localStorage.getItem(`zx_claims_${activeId}`);
     if (savedClaims) {
@@ -208,6 +232,25 @@ export default function Home() {
         }
       })
       .catch(() => setSaveStatus("Offline"));
+  }, []);
+
+  useEffect(() => {
+    const refreshDailyAdCount = () => {
+      const currentDate = getLocalDateKey();
+      if (dailyAdDateRef.current === currentDate) return;
+
+      const count = readDailyAdCount(latestUserId.current, currentDate);
+      dailyAdDateRef.current = currentDate;
+      dailyAdCountRef.current = count;
+      setDailyAdCount(count);
+    };
+
+    const interval = setInterval(refreshDailyAdCount, 30_000);
+    window.addEventListener("focus", refreshDailyAdCount);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", refreshDailyAdCount);
+    };
   }, []);
 
   useEffect(() => {
@@ -296,30 +339,55 @@ export default function Home() {
     await flushToServer(-upgradeCost, nextLevel);
   };
 
+  const handleRewardedAd = async () => {
+    if (adInProgressRef.current) return;
+
+    const Adsgram = (window as unknown as {
+      Adsgram?: {
+        init: (config: { blockId: string }) => {
+          show: () => Promise<unknown>;
+        };
+      };
+    }).Adsgram;
+
+    if (!Adsgram) return;
+
+    const userId = latestUserId.current;
+    const currentDate = getLocalDateKey();
+    const storedCount = readDailyAdCount(userId, currentDate);
+    const currentCount = dailyAdDateRef.current === currentDate
+      ? Math.max(dailyAdCountRef.current, storedCount)
+      : storedCount;
+
+    dailyAdDateRef.current = currentDate;
+    dailyAdCountRef.current = currentCount;
+    if (currentCount >= AD_DAILY_LIMIT) {
+      setDailyAdCount(currentCount);
+      return;
+    }
+
+    const nextCount = currentCount + 1;
+    dailyAdCountRef.current = nextCount;
+    setDailyAdCount(nextCount);
+    localStorage.setItem(`zx_rewarded_ads_${userId}_${currentDate}`, String(nextCount));
+    adInProgressRef.current = true;
+    setAdInProgress(true);
+
+    try {
+      await Adsgram.init({ blockId: "61803" }).show();
+      setCoins((c) => c + AD_REWARD);
+      await flushToServer(AD_REWARD);
+    } catch {
+      // Do not award the reward if the ad does not complete.
+    } finally {
+      adInProgressRef.current = false;
+      setAdInProgress(false);
+    }
+  };
+
   const handleMissionClaim = async (m: MissionItem) => {
     if (m.id === "ad_watch_1") {
-      if (adInProgress) return;
-
-      const Adsgram = (window as unknown as {
-        Adsgram?: {
-          init: (config: { blockId: string }) => {
-            show: () => Promise<unknown>;
-          };
-        };
-      }).Adsgram;
-
-      if (!Adsgram) return;
-
-      setAdInProgress(true);
-      try {
-        await Adsgram.init({ blockId: "61612" }).show();
-        setCoins((c) => c + m.reward);
-        await flushToServer(m.reward);
-      } catch {
-        // Do not award the mission reward if the ad does not complete.
-      } finally {
-        setAdInProgress(false);
-      }
+      await handleRewardedAd();
       return;
     }
 
@@ -395,32 +463,6 @@ export default function Home() {
 
               <button
                 type="button"
-                onClick={() => handleMissionClaim(MISSIONS[0])}
-                disabled={adInProgress}
-                className="zx-card"
-                style={{
-                  background: "linear-gradient(135deg, rgba(34, 211, 238, 0.18), rgba(250, 204, 21, 0.12))",
-                  borderColor: "rgba(250, 204, 21, 0.55)",
-                  cursor: adInProgress ? "wait" : "pointer",
-                  textAlign: "left",
-                }}
-              >
-                <div style={{ paddingRight: "10px" }}>
-                  <div style={{ fontSize: "10px", color: "#facc15", fontWeight: 800, letterSpacing: "0.08em" }}>
-                    📺 REWARD • +1.500 ZX
-                  </div>
-                  <div style={{ fontWeight: 800, fontSize: "13px", marginTop: "2px" }}>
-                    Vizionează reclama (+Bonus)
-                  </div>
-                  <div style={{ fontSize: "11px", color: "#cbd5e1", marginTop: "2px" }}>
-                    Primești bonusul după vizionare — nu trebuie să dai clic pe reclamă.
-                  </div>
-                </div>
-                <span className="zx-btn-pill">{adInProgress ? "Se încarcă..." : "▶ Vizionează"}</span>
-              </button>
-
-              <button
-                type="button"
                 onClick={handleUpgrade}
                 disabled={coins < upgradeCost}
                 className="zx-card"
@@ -448,6 +490,7 @@ export default function Home() {
             {MISSIONS.map((m) => {
               const isDone = claimed.includes(m.id);
               const isAdRunning = m.id === "ad_watch_1" && adInProgress;
+              const isAdLimitReached = m.id === "ad_watch_1" && dailyAdCount >= AD_DAILY_LIMIT;
               return (
                 <div key={m.id} className="zx-card">
                   <div style={{ paddingRight: "10px" }}>
@@ -459,11 +502,19 @@ export default function Home() {
                   </div>
                   <button
                     type="button"
-                    disabled={isDone || isAdRunning}
+                    disabled={isDone || isAdRunning || isAdLimitReached}
                     onClick={() => handleMissionClaim(m)}
                     className={m.id === "ad_watch_1" ? "zx-btn-cyan" : "zx-btn-pill"}
                   >
-                    {isAdRunning ? "Se încarcă..." : isDone ? "✓ Primit" : m.id === "ad_watch_1" ? "▶ Vizionare reclamă" : "Claim"}
+                    {isAdRunning
+                      ? "Se încarcă..."
+                      : isAdLimitReached
+                        ? "Limita atinsă"
+                        : isDone
+                          ? "✓ Primit"
+                          : m.id === "ad_watch_1"
+                            ? "▶ Vizionare reclamă"
+                            : "Claim"}
                   </button>
                 </div>
               );
@@ -589,6 +640,42 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      <button
+        type="button"
+        onClick={handleRewardedAd}
+        disabled={adInProgress || dailyAdCount >= AD_DAILY_LIMIT}
+        className="zx-card"
+        style={{
+          flexShrink: 0,
+          marginTop: "8px",
+          marginBottom: "8px",
+          background: "linear-gradient(135deg, rgba(34, 211, 238, 0.2), rgba(250, 204, 21, 0.16))",
+          borderColor: "rgba(250, 204, 21, 0.6)",
+          cursor: adInProgress ? "wait" : dailyAdCount >= AD_DAILY_LIMIT ? "not-allowed" : "pointer",
+          textAlign: "left",
+          opacity: dailyAdCount >= AD_DAILY_LIMIT ? 0.65 : 1,
+        }}
+      >
+        <div style={{ paddingRight: "10px" }}>
+          <div style={{ fontSize: "10px", color: "#facc15", fontWeight: 800, letterSpacing: "0.08em" }}>
+            📺 REWARD • +{AD_REWARD.toLocaleString()} ZX • {dailyAdCount} / {AD_DAILY_LIMIT} azi
+          </div>
+          <div style={{ fontWeight: 800, fontSize: "13px", marginTop: "2px" }}>
+            Vizionează reclama (+Bonus)
+          </div>
+          <div style={{ fontSize: "11px", color: "#cbd5e1", marginTop: "2px" }}>
+            Bonusul se primește după vizionare — nu trebuie să dai clic pe reclamă.
+          </div>
+        </div>
+        <span className="zx-btn-pill">
+          {adInProgress
+            ? "Se încarcă..."
+            : dailyAdCount >= AD_DAILY_LIMIT
+              ? "Limita atinsă"
+              : "▶ Vizionează"}
+        </span>
+      </button>
 
       <nav className="zx-nav">
         <button type="button" onClick={() => setActiveTab("mine")} className={`zx-nav-item ${activeTab === "mine" ? "active" : ""}`}>
