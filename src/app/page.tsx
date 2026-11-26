@@ -40,7 +40,6 @@ const readDailyAdCount = (userId: number, date: string) => {
 };
 
 const MISSIONS: MissionItem[] = [
-  { id: "ad_watch_1", title: "📺 Vizionare reclamă Reward (opțională)", subtitle: "Alege să vezi reclama; recompensa se acordă după vizionare", reward: AD_REWARD, tag: "ADS" },
   { id: "daily_checkin", title: "🎁 Bonus Zilnic de Conectare", subtitle: "Intră zilnic pentru puncte suplimentare", reward: 2000, tag: "DAILY" },
   { id: "tg_channel", title: "📢 Abonează-te la Canalul ZX", subtitle: "Urmărește anunțurile oficiale Zenith Xecution", reward: 5000, tag: "SOCIAL" },
   { id: "share_story", title: "⚡ Distribuie ZX Tap prietenilor", subtitle: "Trimite link-ul de invitație pe Telegram", reward: 3000, tag: "TASK" },
@@ -374,7 +373,7 @@ export default function Home() {
     setAdInProgress(true);
 
     try {
-      await Adsgram.init({ blockId: "61803" }).show();
+      await Adsgram.init({ blockId: "62058" }).show();
       setCoins((c) => c + AD_REWARD);
       await flushToServer(AD_REWARD);
     } catch {
@@ -386,11 +385,6 @@ export default function Home() {
   };
 
   const handleMissionClaim = async (m: MissionItem) => {
-    if (m.id === "ad_watch_1") {
-      await handleRewardedAd();
-      return;
-    }
-
     if (claimed.includes(m.id)) return;
     const updated = [...claimed, m.id];
     setClaimed(updated);
@@ -483,14 +477,40 @@ export default function Home() {
         {activeTab === "missions" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             <div style={{ textAlign: "center", marginBottom: "4px" }}>
-              <div style={{ fontSize: "18px", fontWeight: 800, color: "#ffffff" }}>🎯 Misiuni & Reclame</div>
-              <div style={{ fontSize: "12px", color: "#94a3b8" }}>Vizionează reclame sau finalizează sarcini pentru puncte ZX</div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#ffffff" }}>Missions &amp; Ads</div>
+              <div style={{ fontSize: "12px", color: "#94a3b8" }}>Complete tasks and watch rewarded ads to earn ZX</div>
+            </div>
+
+            <div
+              className="zx-card"
+              style={{
+                gap: "10px",
+                padding: "10px 12px",
+                background: "rgba(24, 24, 27, 0.88)",
+                borderColor: "rgba(255, 255, 255, 0.1)",
+              }}
+            >
+              <div style={{ minWidth: 0, paddingRight: "4px" }}>
+                <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 700, letterSpacing: "0.04em" }}>
+                  ADS • +{AD_REWARD.toLocaleString()} ZX • {dailyAdCount}/{AD_DAILY_LIMIT} today
+                </div>
+                <div style={{ fontWeight: 700, fontSize: "13px", marginTop: "3px" }}>Watch Rewarded Ad</div>
+                <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>
+                  Watch a short video ad to earn +1,000 ZX
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={adInProgress || dailyAdCount >= AD_DAILY_LIMIT}
+                onClick={handleRewardedAd}
+                className="zx-btn-cyan"
+              >
+                {adInProgress ? "Loading..." : dailyAdCount >= AD_DAILY_LIMIT ? "Limit Reached" : "Watch Ad"}
+              </button>
             </div>
 
             {MISSIONS.map((m) => {
               const isDone = claimed.includes(m.id);
-              const isAdRunning = m.id === "ad_watch_1" && adInProgress;
-              const isAdLimitReached = m.id === "ad_watch_1" && dailyAdCount >= AD_DAILY_LIMIT;
               return (
                 <div key={m.id} className="zx-card">
                   <div style={{ paddingRight: "10px" }}>
@@ -502,19 +522,11 @@ export default function Home() {
                   </div>
                   <button
                     type="button"
-                    disabled={isDone || isAdRunning || isAdLimitReached}
+                    disabled={isDone}
                     onClick={() => handleMissionClaim(m)}
-                    className={m.id === "ad_watch_1" ? "zx-btn-cyan" : "zx-btn-pill"}
+                    className="zx-btn-pill"
                   >
-                    {isAdRunning
-                      ? "Se încarcă..."
-                      : isAdLimitReached
-                        ? "Limita atinsă"
-                        : isDone
-                          ? "✓ Primit"
-                          : m.id === "ad_watch_1"
-                            ? "▶ Vizionare reclamă"
-                            : "Claim"}
+                    {isDone ? "✓ Primit" : "Claim"}
                   </button>
                 </div>
               );
@@ -641,42 +653,6 @@ export default function Home() {
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={handleRewardedAd}
-        disabled={adInProgress || dailyAdCount >= AD_DAILY_LIMIT}
-        className="zx-card"
-        style={{
-          flexShrink: 0,
-          marginTop: "8px",
-          marginBottom: "8px",
-          background: "linear-gradient(135deg, rgba(34, 211, 238, 0.2), rgba(250, 204, 21, 0.16))",
-          borderColor: "rgba(250, 204, 21, 0.6)",
-          cursor: adInProgress ? "wait" : dailyAdCount >= AD_DAILY_LIMIT ? "not-allowed" : "pointer",
-          textAlign: "left",
-          opacity: dailyAdCount >= AD_DAILY_LIMIT ? 0.65 : 1,
-        }}
-      >
-        <div style={{ paddingRight: "10px" }}>
-          <div style={{ fontSize: "10px", color: "#facc15", fontWeight: 800, letterSpacing: "0.08em" }}>
-            📺 REWARD • +{AD_REWARD.toLocaleString()} ZX • {dailyAdCount} / {AD_DAILY_LIMIT} azi
-          </div>
-          <div style={{ fontWeight: 800, fontSize: "13px", marginTop: "2px" }}>
-            Vizionează reclama (+Bonus)
-          </div>
-          <div style={{ fontSize: "11px", color: "#cbd5e1", marginTop: "2px" }}>
-            Bonusul se primește după vizionare — nu trebuie să dai clic pe reclamă.
-          </div>
-        </div>
-        <span className="zx-btn-pill">
-          {adInProgress
-            ? "Se încarcă..."
-            : dailyAdCount >= AD_DAILY_LIMIT
-              ? "Limita atinsă"
-              : "▶ Vizionează"}
-        </span>
-      </button>
-
       <nav className="zx-nav">
         <button type="button" onClick={() => setActiveTab("mine")} className={`zx-nav-item ${activeTab === "mine" ? "active" : ""}`}>
           <span style={{ fontSize: "16px" }}>⚡</span>
@@ -684,7 +660,7 @@ export default function Home() {
         </button>
         <button type="button" onClick={() => setActiveTab("missions")} className={`zx-nav-item ${activeTab === "missions" ? "active" : ""}`}>
           <span style={{ fontSize: "16px" }}>🎯</span>
-          <span>Misiuni</span>
+          <span>Missions</span>
         </button>
         <button type="button" onClick={() => setActiveTab("friends")} className={`zx-nav-item ${activeTab === "friends" ? "active" : ""}`}>
           <span style={{ fontSize: "16px" }}>👥</span>
