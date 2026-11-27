@@ -410,7 +410,7 @@ export default function Home() {
     setAdStatus("");
 
     try {
-      const result = await Adsgram.init({ blockId: "62058" }).show();
+      const result = await Adsgram.init({ blockId: "62247" }).show();
       if (!result.done) {
         setAdStatus("Ad not completed. No ZX reward was added.");
         return;
