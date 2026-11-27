@@ -20,6 +20,21 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## YouTube subscription verification
+
+The Missions tab verifies subscriptions to the ZX-Earn_Officil channel with Google OAuth and the YouTube Data API v3. To enable it:
+
+1. Enable the YouTube Data API v3 in a Google Cloud project and configure the OAuth consent screen.
+2. Create a Google OAuth client with the **Web application** type.
+3. Add the exact callback URL as an authorized redirect URI, for example `https://zx-tap.pages.dev/api/youtube/callback`.
+4. Set these server-side environment variables in the deployment:
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+   - `GOOGLE_REDIRECT_URI` (the exact callback URL registered above)
+   - `DATABASE_URL` (the existing Neon database connection)
+
+For local development, register `http://localhost:3000/api/youtube/callback` as an additional redirect URI and use it for `GOOGLE_REDIRECT_URI`. The app stores only the verified Telegram user ID and channel ID; Google access tokens are not retained.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

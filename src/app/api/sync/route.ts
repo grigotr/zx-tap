@@ -9,7 +9,7 @@ export async function POST(req: Request) {
     const { telegramId, username, coinsToAdd, energy, multitap, referrerId } = await req.json();
 
     if (!telegramId) {
-      return NextResponse.json({ error: "Lipsă Telegram ID" }, { status: 400 });
+      return NextResponse.json({ error: "Missing Telegram ID" }, { status: 400 });
     }
 
     await sql`
@@ -60,8 +60,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ user });
   } catch (error) {
-    console.error("Eroare sincronizare Neon:", error);
-    return NextResponse.json({ error: "Eroare server" }, { status: 500 });
+    console.error("Neon sync error:", error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
 
