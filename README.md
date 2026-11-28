@@ -35,6 +35,22 @@ The Missions tab verifies subscriptions to the ZX-Earn_Officil channel with Goog
 
 For local development, register `http://localhost:3000/api/youtube/callback` as an additional redirect URI and use it for `GOOGLE_REDIRECT_URI`. The app stores only the verified Telegram user ID and channel ID; Google access tokens are not retained.
 
+## Public payout confirmations
+
+The Wallet tab has a public section for completed user payouts. It is populated from real payout records in the `payout_confirmations` database table; the table is created automatically when `/api/payouts` is first requested. The public `GET /api/payouts` endpoint lists up to 100 records. Each record includes its payment date, amount and currency, a public recipient label, payment method, unique transaction reference, and an HTTPS URL to public evidence.
+
+To publish a completed payout, configure the server-side `PAYOUT_ADMIN_SECRET` environment variable with a randomly generated secret of at least 32 characters, then send `POST /api/payouts` with `Authorization: Bearer <PAYOUT_ADMIN_SECRET>` and a JSON body containing:
+
+- `paidAt`: payment date and time
+- `recipientLabel`: a public alias; do not use Telegram IDs or other private information
+- `amount`: positive decimal amount as a string
+- `currency`: uppercase currency or token symbol
+- `paymentMethod`: payment rail or provider
+- `transactionReference`: the real, unique transaction identifier
+- `proofUrl`: HTTPS link to evidence that lets visitors verify this specific payment
+
+Only publish completed payouts and genuine, distinct transaction references. Never add sample, pending, repeated, or invented transactions. A leaderboard balance in ZX points is not proof of a payout. The public section is empty until real confirmations have been added.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

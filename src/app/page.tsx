@@ -29,6 +29,52 @@ interface ReferralRow {
   earned: string | number;
 }
 
+interface PayoutConfirmation {
+  id: string | number;
+  paid_at: string;
+  recipient_label: string;
+  amount: string | number;
+  currency: string;
+  payment_method: string;
+  transaction_reference: string;
+  proof_url: string;
+}
+
+function isPublicEvidenceUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
+function isPayoutConfirmation(value: unknown): value is PayoutConfirmation {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    (typeof value.id === "string" || typeof value.id === "number") &&
+    "paid_at" in value &&
+    typeof value.paid_at === "string" &&
+    Number.isFinite(Date.parse(value.paid_at)) &&
+    "recipient_label" in value &&
+    typeof value.recipient_label === "string" &&
+    "amount" in value &&
+    (typeof value.amount === "string" || typeof value.amount === "number") &&
+    "currency" in value &&
+    typeof value.currency === "string" &&
+    "payment_method" in value &&
+    typeof value.payment_method === "string" &&
+    "transaction_reference" in value &&
+    typeof value.transaction_reference === "string" &&
+    "proof_url" in value &&
+    isPublicEvidenceUrl(value.proof_url)
+  );
+}
+
 const AD_REWARD = 1000;
 const AD_DAILY_LIMIT = 20;
 
@@ -74,6 +120,8 @@ export default function Home() {
   const [loadingFriends, setLoadingFriends] = useState<boolean>(false);
   const [referrerId, setReferrerId] = useState<number | null>(null);
   const [youtubeStatus, setYoutubeStatus] = useState<string>("idle");
+  const [payouts, setPayouts] = useState<PayoutConfirmation[] | null>(null);
+  const [payoutError, setPayoutError] = useState<string>("");
 
   const pendingCoins = useRef<number>(0);
   const latestEnergy = useRef<number>(1000);
@@ -287,6 +335,48 @@ export default function Home() {
         if (activeTab === "friends") setLoadingFriends(false);
       });
   }, [activeTab, userId]);
+
+  useEffect(() => {
+    if (activeTab !== "wallet") return;
+
+    let active = true;
+    fetch("/api/payouts")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Payout confirmations request failed.");
+        const data: unknown = await response.json();
+        if (
+          typeof data !== "object" ||
+          data === null ||
+          !("payouts" in data) ||
+          !Array.isArray(data.payouts)
+        ) {
+          throw new Error("Payout confirmations response was invalid.");
+        }
+        const items: PayoutConfirmation[] = [];
+        for (const item of data.payouts) {
+          if (!isPayoutConfirmation(item)) {
+            throw new Error("Payout confirmations response contained an invalid record.");
+          }
+          items.push(item);
+        }
+        return items;
+      })
+      .then((items) => {
+        if (!active) return;
+        setPayouts(items);
+        setPayoutError("");
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        console.error("Payout confirmations request error:", error);
+        setPayouts([]);
+        setPayoutError("Payout confirmations could not be loaded. Please try again later.");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab !== "missions") return;
@@ -824,6 +914,66 @@ export default function Home() {
               <div style={{ fontSize: "12px", color: "#94a3b8", lineHeight: 1.5 }}>
                 <strong style={{ color: "#e4e4e7" }}>Referrals:</strong> Earn 10% of invited friends&apos; mined ZX. Referral commissions are tracked separately.
               </div>
+            </section>
+
+            <section className="zx-card" style={{ flexDirection: "column", alignItems: "stretch", gap: "10px" }}>
+              <div>
+                <div style={{ fontSize: "14px", fontWeight: 700, color: "#ffffff" }}>Public Payout Confirmations</div>
+                <div style={{ fontSize: "11px", color: "#94a3b8", lineHeight: 1.5, marginTop: "4px" }}>
+                  Completed user payouts are listed here with the payment date, amount, public recipient label, unique transaction reference, and a link to public evidence. ZX points and leaderboard balances are not cash payouts.
+                </div>
+              </div>
+
+              {payoutError ? (
+                <div role="status" style={{ fontSize: "12px", color: "#fca5a5" }}>{payoutError}</div>
+              ) : payouts === null ? (
+                <div role="status" style={{ fontSize: "12px", color: "#94a3b8" }}>Loading payout confirmations...</div>
+              ) : payouts.length === 0 ? (
+                <div style={{ fontSize: "12px", color: "#94a3b8", lineHeight: 1.5 }}>
+                  No payout confirmations have been published yet. Only completed payouts with public evidence should appear here.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <div style={{ fontSize: "11px", color: "#94a3b8" }}>
+                    {payouts.length} published payout confirmation{payouts.length === 1 ? "" : "s"}
+                  </div>
+                  {payouts.map((payout) => (
+                    <article
+                      key={String(payout.id)}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "5px",
+                        padding: "10px",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        borderRadius: "12px",
+                        background: "rgba(255,255,255,0.025)",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
+                        <strong style={{ fontSize: "12px", color: "#e4e4e7" }}>{payout.recipient_label}</strong>
+                        <strong style={{ fontSize: "12px", color: "#52e0d0" }}>
+                          {String(payout.amount)} {payout.currency}
+                        </strong>
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#94a3b8" }}>
+                        {new Date(payout.paid_at).toISOString()} · {payout.payment_method}
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#94a3b8", overflowWrap: "anywhere" }}>
+                        Reference: {payout.transaction_reference}
+                      </div>
+                      <a
+                        href={payout.proof_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ width: "fit-content", color: "#80f3df", fontSize: "11px", fontWeight: 700 }}
+                      >
+                        View payment evidence ({new URL(payout.proof_url).hostname})
+                      </a>
+                    </article>
+                  ))}
+                </div>
+              )}
             </section>
           </div>
         )}
